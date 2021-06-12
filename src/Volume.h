@@ -16,14 +16,9 @@ class Volume
     void begin();
     void end();
     void alternatePin(bool enabled);
-    void throwError(byte errorNum);
     void tone(int frequency, byte volume);
     void fadeOut(int duration);
     void noTone();
-    unsigned long millis();
-    unsigned long micros();
-    void delay(unsigned long d);
-    void delayMicroseconds(unsigned long du);
     void setMasterVolume(float mv);
 };
 
