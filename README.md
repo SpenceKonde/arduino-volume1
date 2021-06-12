@@ -57,7 +57,7 @@ Here is what you need to get started with the bare minimum:
 
     Volume vol; // Plug your speaker into the default pin for your board type:
     // https://github.com/connornishijima/arduino-volume1#supported-pins
-
+    
     void setup() {
       vol.begin();
     }
@@ -65,12 +65,12 @@ Here is what you need to get started with the bare minimum:
       byte volumes[4] = {255, 127, 12, 0};   // List of volumes: 100% Volume, 50% Volume, 5% Volume, 0% Volume
       for (int i = 0; i < 4; i++) { // Iterate through volume list one second at a time
         vol.tone(440, volumes[i]);
-        vol.delay(1000);
+        delay(1000); // normal delay works now!
       }
 
       vol.tone(880, 255); // 100% Volume
       vol.fadeOut(5000);  // Start a 5 second fade out
-      vol.delay(5000);    // Wait for this fade to finish
+      delay(5000);    // Wait for this fade to finish
     }
 
 Of course, you can set the volume to any value between 0 and 255 you'd like, for full 8-bit volume fades.
@@ -105,7 +105,7 @@ This is identical in function to the standard `noTone()` function, this stops an
 **vol.delay**();   **vol.delayMicroseconds**();
 **vol.millis**();   **vol.micros**();
 
-These are replacements to the standard time-keeping Arduino functions designed to compensate for the changes in the Timer0 clock divisor. See [Limitations](#limitations).
+**Spence Konde 2021: These are NO LONGER NEEDED since changing to use timer2... and delayMicroseconds never was because that doesn't use the timer, it counts clock cycles.**
 
 **vol.end**();
 
@@ -122,41 +122,46 @@ By default, the library uses DEFAULT_PIN for the speaker, *(changes from board t
 
 | Board                           | DEFAULT_PIN | ALTERNATE_PIN | Tested |
 |---------------------------------|-------------|---------------|--------|
-| (**Uno**) ATmega168/328(pb)     | 5           | 6             | YES    |
-| (**Mega**) ATmega1280/2560      | 4           | 13            | YES    |
-| (**Leo/Micro**) ATmega16u2/32u4 | 9           | 10            | YES*   |
+| (**Uno**) ATmega168/328(pb)     | 3           | 11            | YES    |
+| (**Mega**) ATmega1280/2560      | 9           | 10            | YES    |
 
-*I recently killed my only ATmega32u4 board while stripping it for low-power usage and don't have one to test current releases of the library. If anyone who has a working one wants to report compatibility back to me, please do so as I've only tested the initial release!
+*I recently killed my only ATmega32u4 board while stripping it for low-power usage and don't have one to test current releases of the library. If anyone who has a working one wants to report compatibility back to me, please do so as I've only tested the initial release!*
+**Spence Konde, 2021:** those were the wrong pins, so it never worked on the micro/leo. Needs different implementation there because it doesn't have a timer2, but it has plenty of other timers to use. 
 
 ----------
 # Limitations
-Unfortunately, cheating the Arduino's normal functions in this way means we'll lose some of them. This is also still a proof-of-concept library at this point, so it may break more functionality than I'm aware of. Sorry!
+~~Unfortunately, cheating the Arduino's normal functions in this way means we'll lose some of them. This is also still a proof-of-concept library at this point, so it may break more functionality than I'm aware of. Sorry!~~
+It doesn't mess with timing anymore
 
 ~~**16MHz Only:**~~
-
 ~~I haven't programmed in options for 8MHz boards yet, though if you want to use one, just replace all occurrences of "16000000" in the library files with "8000000" and it may work.~~
 
 Automatic detection of CPU speed was added in version 1.0.2!
 
+
 **ATmega* Only:**
 
-I don't know if I'll have this working on ATTiny*5 boards any time soon, though it's theoretically possible on any AVR with >= 2 timers. For now, it's only confirmed working on Arduino Uno (ATMega168/328) and Mega. (ATMega1280/2560)
+I don't know if I'll have this working on ATTiny*5 boards any time soon, though it's theoretically possible on any AVR with >= 2 timers. For now, it's only confirmed working on Arduino Uno (ATMega168/328) and Mega. (ATMega1280/2560). 
+**Spence Konde: Adding support for any ATmega with a timer2 is just a matter of adding the pins to the #ifdef. On parts where the pins are unknown, #error used to print appropriate message indicating whether there's a timer2 (and thus support will be easy) or not (thus support will be hard) or it's a modern avr which can doi this with the stock tone function and a dummy pin with one CCL logic block (or custom tone implementation and 2 CCL LUTs).**
 
-**Volume is limited to pins ~~5 & 6:~~**
+**Volume is limited to pins ~~3 & 11:~~**
 
-This is because only pins ~~5 & 6~~ are driven by Timer0, *which can do PWM at a frequency higher than your hearing range!* This is the main trick behind the volume function. It also means that while you're using Volume, normal `analogWrite()` use probably won't work on these two pins.
+This is because only pins ~~3 & 11~~ are driven by Timer2, which when used in FastPWM mode, can do PWM at a frequency higher than your hearing range! This is the main trick behind the volume function. It also means that while you're using Volume, normal `analogWrite()` use probably won't work on these two pins. **Spence Konde** Yeah it will assuming whatever you're PWMing is ok with the high frequency (ie, not MOSFETs).
 
-*Now that the Mega168, 328, 1280, 2560, 16u2/32u4 and more are now supported, the supported pins differs from board to board. See [Supported Pins](#supported-pins) section.*
+*Now that the Mega168, 328, 1280, 2560 the supported pins differs from board to board. See [Supported Pins](#supported-pins) section.*
 
-**Volume alters Timer0 for 62.5KHz PWM:**
+**Volume alters Timer2 for 62.5KHz PWM:**
 
-Speaking of Timer0 - it's normally used for the `delay()`, `delayMicroseconds()`, `millis()` and `micros()` functions. Normally with Timer0 set with a divisor of 64, `delay(1000)` would wait for 1 second - but because Volume sets Timer0 with a divisor of 1, `delay(1000)` will now only wait for 15.625ms! But don't worry. Volume provides alternative `vol.delay(time)` and `vol.delayMicroseconds(time)` functions with the math fixed for you. This new divisor is necessary to drive PWM at 62.5KHz, faster than you can hear.
+Instead of taking over the millis timer, Timer0, the same effect can be achived with Timer2. 
+~~Speaking of Timer0 - it's normally used for the `delay()`, `delayMicroseconds()`, `millis()` and `micros()` functions. Normally with Timer0 set with a divisor of 64, `delay(1000)` would wait for 1 second - but because Volume sets Timer0 with a divisor of 1, `delay(1000)` will now only wait for 15.625ms! But don't worry. Volume provides alternative `vol.delay(time)` and `vol.delayMicroseconds(time)` functions with the math fixed for you. This new divisor is necessary to drive PWM at 62.5KHz, faster than you can hear.~~
 
 ~~**Volume does not yet offer fixed millis() or micros() functions:**~~
 
 ~~I haven't gotten around to toying with these yet. If you need to use `millis()` or `micros()` BETWEEN playing sounds, just use a `vol.end()` to reset Timer0 to it's default function, and `vol.begin()` to use it for Volume again after you're done.~~
 
-Version 1.1.1 added proper millis() and micros() support! See [Functions](#functions).
+~~Version 1.1.1 added proper millis() and micros() support! See [Functions](#functions).~~
+
+No longer needed
 
 ----------
 # Volume Library Comparison
@@ -188,6 +193,8 @@ As I've only written one library before for my own use, I'm still new to this! A
 ----------
 # License and Credits
 **Developed by Connor Nishijima (2016)**
+
+**Spence Konde was nerdsniped by the relatively simple changes to deal with a bunch of issues (2021)**
 
 **Special Thanks to Andrew Neal** (For putting up with the incessant and inconsistent artificial "cricket-duino" hidden in his vent that I developed this library for.)
 
